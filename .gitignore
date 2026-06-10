@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Benchmark data (fetched via scripts/get_data.py)
+data/
+
+# Local results / artifacts
+*.npz
+*.pt
+.pytest_cache/
