@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from teleport.baselines import Compressor, default_baselines
+from teleport.coder import PredictorCompressor
+from teleport.predictors import PREDICTORS
 
 
 @dataclass
@@ -94,9 +96,24 @@ def main() -> None:
     parser.add_argument(
         "--append", type=Path, default=None, help="results.md path to append the table to"
     )
+    parser.add_argument(
+        "--predictor",
+        choices=sorted(PREDICTORS),
+        default=None,
+        help="Also benchmark this predictor (in addition to the baseline compressors)",
+    )
+    parser.add_argument(
+        "--predictor-only",
+        action="store_true",
+        help="With --predictor, skip the gzip/bzip2/zstd baseline rows",
+    )
     args = parser.parse_args()
 
-    results = bench_corpus(args.corpus)
+    compressors: list[Compressor] = [] if args.predictor_only else default_baselines()
+    if args.predictor:
+        compressors.append(PredictorCompressor(args.predictor, PREDICTORS[args.predictor]))
+
+    results = bench_corpus(args.corpus, compressors)
     table = format_table(results)
     print(table)
 

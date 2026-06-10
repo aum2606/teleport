@@ -73,10 +73,16 @@ python tests/verify_sync.py        # encoder/decoder lockstep check (neural mode
 > Update this section as work progresses — it is the single source of truth
 > for "where are we".
 
-- **Phase:** 0 complete — bench harness, baselines, and enwik6 corpus are in place.
-- **Next milestone:** Phase 1 — integer arithmetic coder + Predictor protocol +
-  uniform/order-0/PPM predictors (see IMPLEMENTATION_PLAN.md section 1).
-- **Frozen components:** none yet (coder freezes at end of Phase 1)
+- **Phase:** 1 complete — arithmetic coder, Predictor protocol, and
+  uniform/order0/ppm2/ppm3 predictors all pass round-trip on full enwik6
+  (see results.md). `bench.py --predictor {name}` wires any predictor through
+  the coder.
+- **Next milestone:** Phase 2 — neural predictor (online + pretrained shared
+  modes), see IMPLEMENTATION_PLAN.md section 2. `verify_sync.py` must exist
+  before touching `predictors/rnn*`.
+- **Frozen components:** `src/teleport/coder/` (arithmetic.py, bitio.py,
+  freqs.py, codec.py) — round-trip-exact on enwik6 for all four predictors.
+  Do not modify; fix predictors instead.
 
 ## Things that will bite you (learned the hard way / known pitfalls)
 
