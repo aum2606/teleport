@@ -73,16 +73,75 @@ python tests/verify_sync.py        # encoder/decoder lockstep check (neural mode
 > Update this section as work progresses — it is the single source of truth
 > for "where are we".
 
-- **Phase:** 1 complete — arithmetic coder, Predictor protocol, and
-  uniform/order0/ppm2/ppm3 predictors all pass round-trip on full enwik6
-  (see results.md). `bench.py --predictor {name}` wires any predictor through
-  the coder.
-- **Next milestone:** Phase 2 — neural predictor (online + pretrained shared
-  modes), see IMPLEMENTATION_PLAN.md section 2. `verify_sync.py` must exist
-  before touching `predictors/rnn*`.
+- **Phase:** 4 (Option A, generative/semantic extreme) complete.
+  - 2.1 (online neural predictor): `predictors/rnn.RNNPredictor` is a small
+    online GRU (embedding 16, hidden 64, double precision, single-threaded,
+    fixed seed, Adam) trained as it compresses; 5.0412 bpc on a 20KB enwik6
+    slice (worse than gzip/bzip2/zstd/order0 — honest negative result for
+    online-from-scratch at this scale, see results.md).
+  - 2.2 (pretrained shared-model "teleport" mode):
+    `predictors/rnn.PretrainedRNNPredictor` loads a frozen GRU (embedding
+    16, hidden 128) pretrained by `scripts/pretrain_rnn.py` on
+    `enwik6[200000:400000]`. In-domain: 2.9192 bpc — beats gzip/bzip2/zstd.
+    Out-of-domain (Python source): 5.2100 bpc — worse than all classical
+    baselines. The in-domain/out-of-domain gap is the project thesis made
+    concrete (see results.md).
+  - `tests/verify_sync.py` checks encoder/decoder lockstep determinism for
+    both predictors and passes.
+  - 3 (lossy image compression, small end-to-end slice): a tiny conv
+    autoencoder (`src/teleport/image/model.py`, 4 latent channels, /8
+    downsample) with a `SpatialContextModel` entropy model — a 2-layer
+    MLP "PixelCNN-lite" predicting each latent symbol's Gaussian(mean,
+    scale) from its left/top causal neighbors and channel index — trained
+    on 64x64 patches from `kodim01..kodim18` (`scripts/train_image.py`,
+    `models/image_codec.pt`). Latent symbols are entropy-coded losslessly
+    via the frozen Phase 1 coder, with `ContextLatentPredictor`
+    (`src/teleport/image/codec.py`) supplying a fresh per-position table
+    from the context model. Evaluated on held-out `kodim19..kodim24`
+    (`scripts/eval_image.py`): **0.1785 bpp avg, 23.52 dB PSNR / 0.8900
+    MS-SSIM — beats JPEG (0.1774 bpp, 22.01 dB / 0.7460 MS-SSIM) on every
+    one of the 6 held-out images on both metrics**, by a wide MS-SSIM
+    margin (0.8900 vs 0.7460). WebP still leads (0.1830 bpp, 28.38 dB /
+    0.9219 MS-SSIM), but the MS-SSIM gap (0.032) is much smaller than the
+    PSNR gap (4.86 dB). MS-SSIM implemented by hand, torch only
+    (`src/teleport/image/metrics.py`, Wang/Simoncelli/Bovik 2003). An
+    earlier version with a per-channel global Gaussian (no spatial
+    context) scored 0.36 bpp / 23.22 dB — same encoder/decoder/data/
+    lambda, only the entropy model changed, and bpp dropped 0.34 -> 0.21
+    at equal PSNR on the training set. IMPLEMENTATION_PLAN.md section 3's
+    literal acceptance criterion ("beat JPEG on MS-SSIM at < 0.3 bpp") is
+    met (see results.md). The latent-symbol round trip through the
+    unmodified arithmetic coder is exact and tested
+    (`tests/test_image.py`).
+  - 4 (generative/semantic extreme, Option A — latent-diffusion
+    "teleport"): TAESD (`madebyollin/taesd`, frozen, ~2.4M params /
+    9.79MB, 4 latent channels, /8 downsample) is the shared "pre-staged
+    matter". `src/teleport/generative/codec.py` encodes via TAESD,
+    average-pools the scaled latent by an extra 8x (64x total per side),
+    quantizes to uint8, and entropy-codes the resulting tiny grid (4 x
+    H/64 x W/64) with `Order0Predictor` through the unmodified Phase 1
+    coder; the decoder upsamples (nearest) and runs TAESD's decoder.
+    Lossless round trip of the quantized symbols is tested in
+    `tests/test_generative.py`. Evaluated on held-out `kodim19..kodim24`
+    (`scripts/eval_generative.py`): **avg 354 bytes (0.0072 bpp), 17.25 dB
+    PSNR / 0.4913 MS-SSIM**. JPEG/WebP at quality 1 (their smallest
+    possible size) are 7.8-11.0 KB — ~20-25x larger than our payload —
+    and score 21.68 dB/0.7283 and 27.46 dB/0.9072 respectively; **classical
+    codecs cannot reach this byte budget at all**. LPIPS (suggested by
+    IMPLEMENTATION_PLAN.md section 4) was substituted with the Phase 3
+    hand-rolled MS-SSIM, documented in `scripts/eval_generative.py` and
+    results.md. Writeup of "when is this real compression vs a parlor
+    trick?" is in results.md (Phase 4 section).
+- **Next milestone:** none — the user chose to stop after Phase 4. All
+  4 planned phases are complete with documented, honest results
+  (results.md). If resumed later, IMPLEMENTATION_PLAN.md's "Stretch /
+  Research directions (after Phase 4)" section has candidate next steps
+  (bit-identical int8 neural inference, delta/content-addressed transport,
+  federated dictionary research).
 - **Frozen components:** `src/teleport/coder/` (arithmetic.py, bitio.py,
-  freqs.py, codec.py) — round-trip-exact on enwik6 for all four predictors.
-  Do not modify; fix predictors instead.
+  freqs.py, codec.py) — round-trip-exact on enwik6 for all four text
+  predictors and on the Phase 3 image latent symbols. Do not modify; fix
+  predictors instead.
 
 ## Things that will bite you (learned the hard way / known pitfalls)
 
@@ -100,6 +159,11 @@ python tests/verify_sync.py        # encoder/decoder lockstep check (neural mode
 
 - Don't add dependencies beyond numpy/torch/pillow/pytest/matplotlib without
   noting why here.
+  - Phase 4 added `diffusers` + `safetensors` (optional `generative` extra)
+    to load TAESD (`madebyollin/taesd`, ~2.4M params, 4 latent channels, /8
+    spatial downsample), a tiny pretrained VAE used as the "pre-staged
+    matter" for the generative-extreme demo. No training of this model is
+    done — it's loaded frozen.
 - Don't "fix" failing round-trip tests by loosening the assertion to fuzzy
   equality. Lossless means lossless.
 - Don't train large models; this project's models are deliberately small

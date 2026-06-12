@@ -2,10 +2,13 @@ import numpy as np
 import pytest
 
 from teleport.predictors import PREDICTORS
+from teleport.predictors.rnn import DEFAULT_WEIGHTS
 
 
 @pytest.mark.parametrize("name", list(PREDICTORS.keys()))
 def test_predict_is_valid_distribution(name):
+    if name == "rnn_pretrained" and not DEFAULT_WEIGHTS.exists():
+        pytest.skip("models/rnn_shared.pt not built (run scripts/pretrain_rnn.py)")
     predictor = PREDICTORS[name]()
     data = b"abracadabra mississippi banana " * 5
 

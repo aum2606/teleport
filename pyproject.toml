@@ -7,6 +7,7 @@ dependencies = [
     "numpy>=1.26",
     "zstandard>=0.22",
     "requests>=2.31",
+    "torch>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -14,12 +15,13 @@ dev = [
     "pytest>=8.3",
     "hypothesis>=6.100",
 ]
-torch = [
-    "torch>=2.2",
-]
 image = [
     "pillow>=10.0",
     "matplotlib>=3.8",
+]
+generative = [
+    "diffusers>=0.27",
+    "safetensors>=0.4",
 ]
 
 [build-system]
