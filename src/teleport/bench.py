@@ -21,8 +21,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from teleport.baselines import Compressor, default_baselines
+from teleport.baselines import Compressor, LzmaCompressor, default_baselines
 from teleport.coder import PredictorCompressor
+from teleport.hybrid import HybridCompressor
 from teleport.predictors import PREDICTORS
 
 
@@ -107,11 +108,25 @@ def main() -> None:
         action="store_true",
         help="With --predictor, skip the gzip/bzip2/zstd baseline rows",
     )
+    parser.add_argument(
+        "--hybrid",
+        action="store_true",
+        help="Also benchmark the hybrid codec (best-of stored/lzma/bz2/neural, see hybrid.py)",
+    )
+    parser.add_argument(
+        "--lzma",
+        action="store_true",
+        help="Also benchmark stdlib lzma-9 (one of the hybrid codec's classical candidates)",
+    )
     args = parser.parse_args()
 
     compressors: list[Compressor] = [] if args.predictor_only else default_baselines()
     if args.predictor:
         compressors.append(PredictorCompressor(args.predictor, PREDICTORS[args.predictor]))
+    if args.lzma:
+        compressors.append(LzmaCompressor())
+    if args.hybrid:
+        compressors.append(HybridCompressor())
 
     results = bench_corpus(args.corpus, compressors)
     table = format_table(results)

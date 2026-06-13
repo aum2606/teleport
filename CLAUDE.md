@@ -142,6 +142,19 @@ python tests/verify_sync.py        # encoder/decoder lockstep check (neural mode
   freqs.py, codec.py) — round-trip-exact on enwik6 for all four text
   predictors and on the Phase 3 image latent symbols. Do not modify; fix
   predictors instead.
+- **Post-Phase-4 addition: hybrid codec** (`src/teleport/hybrid.py`,
+  HYBRID_CODEC_TASK.md). `compress_hybrid`/`decompress_hybrid` wrap a 1-byte
+  method-id header around the smallest of {stored, lzma-9, bz2-9,
+  `PretrainedRNNPredictor` via the Phase 1 coder}. Neutralizes the Phase 2.2
+  out-of-domain failure (5.21 bpc) at the cost of exactly one byte while
+  keeping the in-domain win: 2.9196 bpc in-domain (vs 2.9192 neural alone),
+  2.3348 bpc on `code_ood_20k` (best-classical + 1 byte, vs 5.21 bpc neural
+  alone). A cheap 2KB cross-entropy probe skips the ~7-8s neural candidate
+  when it's hopeless (>4.5 bpc), giving a ~12x compress-time speedup on
+  `code_ood_20k` with byte-identical output. `tests/test_hybrid.py` covers
+  round trips, the never-worse property, method selection, the probe, and
+  unknown-id errors. Registered in `bench.py` via `--hybrid`/`--lzma`. See
+  results.md "Hybrid codec" section.
 
 ## Things that will bite you (learned the hard way / known pitfalls)
 

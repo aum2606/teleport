@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import bz2
 import gzip
+import lzma
 import zlib
 from dataclasses import dataclass
 from typing import Protocol
@@ -55,6 +56,21 @@ class Bzip2Compressor:
 
 
 @dataclass
+class LzmaCompressor:
+    preset: int = 9
+    name: str = "lzma-9"
+
+    def __post_init__(self) -> None:
+        self.name = f"lzma-{self.preset}"
+
+    def compress(self, data: bytes) -> bytes:
+        return lzma.compress(data, preset=self.preset)
+
+    def decompress(self, data: bytes) -> bytes:
+        return lzma.decompress(data)
+
+
+@dataclass
 class ZstdCompressor:
     level: int = 19
     name: str = "zstd-19"
@@ -79,6 +95,7 @@ __all__ = [
     "Compressor",
     "GzipCompressor",
     "Bzip2Compressor",
+    "LzmaCompressor",
     "ZstdCompressor",
     "default_baselines",
     "zlib",
